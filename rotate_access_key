@@ -1,0 +1,80 @@
+#!/usr/bin/env sh
+
+function usage() {
+  cat << HELP_USAGE
+This method accepts a user name on AWS, rotates their access token, and performs a callback function with the new access token.
+
+If the user has one access token currently, the new token will be created along side it first and the old one will be removed after the callback function completes.
+If the user has two access tokens, one of the existing tokens will be removed and rotated, while the other one will stay untouched (by default).
+
+usage: rotate [-kdhv] [-p profile] [-u username]
+
+-k           keep old access token (only applicable if there was previously only one access token)
+-d           destroy all old access tokens
+-v           verbose
+-p profile   the profile to use for this operation, needs to have permissions to list, create and destroy access tokens for the target user.
+-u username  the username of the user to rotate the keys for
+-h  show this help message
+HELP_USAGE
+}
+
+function print() {
+  if [[ "$verbose" == true ]]; then 
+    echo $1
+  fi
+}
+
+echoerr() { echo "$@" 1>&2; }
+
+function rotate() {
+  local keep_old_token=false
+  local destroy_old_tokens=false
+  local verbose=false
+  local profile="h"
+
+  # handle options  
+  while getopts "kdvhp:u:" flag; do
+    case $flag in
+      k) keep_old_token=true;;
+      d) destroy_old_tokens=true;;
+      v) verbose=true;;
+      h) usage; exit 0;;
+      p) profile=$OPTARG;;
+      u) username=$OPTARG;;
+      ?) echo "unknown flag ignored: $flag";;
+    esac
+  done
+
+  print "Running in verbose mode"
+
+  print "Profile: $profile"
+  if [[ -z $profile ]]; then
+    echoerr "Error: AWS profile required"
+    exit 1
+  fi
+
+  print "Username: $username"
+  if [[ -z $username ]]; then
+    echoerr "Error: AWS username required"
+    usage
+    exit 1
+  fi
+
+  print "Fetching existing access tokens..."
+  keys=$(aws iam list-access-keys --profile $profile --user $username )
+  key_length=$(echo $keys | jq '.AccessKeyMetadata | length')
+  print "Found $key_length keys"
+
+  case $key_length in
+    0) handleNoExisingKeys;;
+    1) handleOneExistingKey;;
+    2) handleTwoExistingKeys;;
+    *)
+      echoerr "Unexpected amount of existing tokens: $key_length. exiting..."
+      echoerr "Keys found: $keys"
+      exit 0
+      ;;
+  esac
+}
+
+rotate "$@"
