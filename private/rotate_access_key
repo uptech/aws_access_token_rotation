@@ -65,24 +65,19 @@ function set_preferences() {
 }
 
 function remove_existing_token() {
-  local keys="$1"
-  sorted_by_date=$(echo "$keys" | jq '. | sort_by(.CreateDate)')
+  local access_key_id="$1"
 
-  if [[ $remove_newer ]]; then
-    to_remove=$(echo $sorted_by_date | jq '. | last | .AccessKeyId' -r)
-  else
-    to_remove=$(echo $sorted_by_date | jq '. | first | .AccessKeyId' -r)
-  fi
+  print "Removing key with ID $access_key_id..."
 
-  print "Removing key with ID $to_remove..."
+  run_iam_command delete-access-key --access-key-id "$access_key_id"
 
-  run_iam_command delete-access-key --access-key-id $to_remove
+  print "Key with ID $access_key_id removed successfully."
 }
 
 function create_and_run_callback() {
   print "Creating new key..."
   new_credentials=$(run_iam_command create-access-key)
-  print "Running callback function with new access key"
+  print "Running callback function with new access key..."
 
   if [[ -z $callback ]]; then
     print "Callback not passed, printing out credentials instead."
@@ -93,20 +88,33 @@ function create_and_run_callback() {
 }
 
 function rotate_single_key() {
-  local destroy_existing=${1:-$((1-keep_old_token))}
+  local existing_token=$1
+  local destroy_existing=${2:-$((1-keep_old_token))}
 
   create_and_run_callback
 
   if [[ ! "$destroy_existing" ]]; then
     print "Removing old token..."
-    remove_existing_token
+    remove_existing_token "$existing_token"
   fi
 }
 
 function remove_key_and_rotate() {
   local keys="$1"
-  remove_existing_token "$keys" 
-  rotate_single_key $destroy_old_tokens
+
+  sorted_by_date=$(echo "$keys" | jq '. | sort_by(.CreateDate)')
+
+  newer=$(echo $sorted_by_date | jq '. | last | .AccessKeyId' -r)
+  older=$(echo $sorted_by_date | jq '. | first | .AccessKeyId' -r)
+
+  if [[ $remove_newer ]]; then
+    remove_existing_token "$newer" 
+    rotate_single_key "$older" $destroy_old_tokens
+  else
+
+    remove_existing_token "$older" 
+    rotate_single_key "$newer" $destroy_old_tokens
+  fi
 }
 
 rotate "$@"
