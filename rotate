@@ -1,0 +1,6 @@
+!/usr/bin/env sh
+
+source "./rotate_access_key"
+
+// entry point for runnning this script standalone
+rotate "$@"

@@ -1,38 +1,6 @@
 #!/usr/bin/env sh
 
-function usage() {
-  cat << HELP_USAGE
-This method accepts a user name on AWS, rotates their access token, and performs a callback function with the new access token.
-
-If the user has one access token currently, the new token will be created along side it first and the old one will be removed after the callback function completes.
-If the user has two access tokens, one of the existing tokens will be removed and rotated, while the other one will stay untouched (by default).
-
-usage: rotate [-kdhv] [-p profile] [-u username] [-c callback]
-
--k           if there was previously one token, keep old access token
--d           destroy all old access tokens
--n           if there are two existing tokens, remove the newer one instead of the older one
--v           verbose
--h           show this help message
--p profile   the profile to use for this operation, needs to have permissions to list, create and destroy access tokens for the target user.
--u username  the username of the user to rotate the keys for
--c callback  callback function to run with the new access token credentials
-HELP_USAGE
-}
-
-function print() {
-  if [[ $verbose == 1 ]]; then 
-    echo $@
-  fi
-}
-
-echoerr() { echo "$@" 1>&2; }
-
-function run_iam_command() {
-  command=$1
-  shift
-  aws iam $command --profile $profile --user $username $@
-}
+source "./private/rotate_access_key"
 
 function rotate() {
   keep_old_token=0
@@ -40,35 +8,9 @@ function rotate() {
   remove_newer=0
   verbose=0
 
-  # handle options  
-  while getopts "kdvsnhp:u:c:" flag; do
-    case $flag in
-      k) keep_old_token=1;;
-      d) destroy_old_tokens=1;;
-      v) verbose=1;;
-      n) remove_newer=1;;
-      h) usage; exit 0;;
-      p) profile=$OPTARG;;
-      u) username=$OPTARG;;
-      c) callback=$OPTARG;;
-      ?) echo "unknown flag ignored: $flag";;
-    esac
-  done
+  set_preferences
 
   print "Running in verbose mode"
-
-  print "Profile: $profile"
-  if [[ -z $profile ]]; then
-    echoerr "Error: AWS profile required"
-    exit 1
-  fi
-
-  print "Username: $username"
-  if [[ -z $username ]]; then
-    echoerr "Error: AWS username required"
-    usage
-    exit 1
-  fi
 
   print "Fetching existing access tokens..."
   local keys=$(run_iam_command list-access-keys | jq '.AccessKeyMetadata' -r)
@@ -87,50 +29,3 @@ function rotate() {
   esac
   print "Access key successfully rotated"
 }
-
-function remove_existing_token() {
-  local keys="$1"
-  sorted_by_date=$(echo $keys | jq '. | sort_by(.CreateDate)')
-
-  if [[ $remove_newer ]]; then
-    to_remove=$(echo $sorted_by_date | jq '. | last | .AccessKeyId' -r)
-  else
-    to_remove=$(echo $sorted_by_date | jq '. | first | .AccessKeyId' -r)
-  fi
-
-  print "Removing key with ID $to_remove..."
-
-  run_iam_command delete-access-key --access-key-id $to_remove
-}
-
-function create_and_run_callback() {
-  print "Creating new key..."
-  new_credentials=$(run_iam_command create-access-key)
-  print "Running callback function with new access key"
-
-  if [[ -z $callback ]]; then
-    print "Callback not passed, printing out credentials instead."
-    print "$new_credentials"
-  else
-    $callback "$new_credentials"
-  fi
-}
-
-function rotate_single_key() {
-  local destroy_existing=${1:-$((1-keep_old_token))}
-
-  create_and_run_callback
-
-  if [[ ! "$destroy_existing" ]]; then
-    print "Removing old token..."
-    remove_existing_token
-  fi
-}
-
-function remove_key_and_rotate() {
-  local keys="$1"
-  remove_existing_token "$keys" 
-  rotate_single_key $destroy_old_tokens
-}
-
-rotate "$@"
