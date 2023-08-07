@@ -7,13 +7,12 @@ This method accepts a user name on AWS, rotates their access token, and performs
 If the user has one access token currently, the new token will be created along side it first and the old one will be removed after the callback function completes.
 If the user has two access tokens, one of the existing tokens will be removed and rotated, while the other one will stay untouched (by default).
 
-usage: rotate [-kdhvs] [-p profile] [-u username] [-c callback]
+usage: rotate [-kdhv] [-p profile] [-u username] [-c callback]
 
 -k           if there was previously one token, keep old access token
 -d           destroy all old access tokens
 -n           if there are two existing tokens, remove the newer one instead of the older one
 -v           verbose
--s           print to the console the new access token credentials
 -h           show this help message
 -p profile   the profile to use for this operation, needs to have permissions to list, create and destroy access tokens for the target user.
 -u username  the username of the user to rotate the keys for
@@ -22,7 +21,7 @@ HELP_USAGE
 }
 
 function print() {
-  if [[ "$verbose" == true ]]; then 
+  if [[ $verbose == 1 ]]; then 
     echo $@
   fi
 }
@@ -36,20 +35,18 @@ function run_iam_command() {
 }
 
 function rotate() {
-  local keep_old_token=false
-  local destroy_old_tokens=false
-  local verbose=false
-  local show_credentials=false
-  local remove_newer=false
+  keep_old_token=0
+  destroy_old_tokens=0
+  remove_newer=0
+  verbose=0
 
   # handle options  
   while getopts "kdvsnhp:u:c:" flag; do
     case $flag in
-      k) keep_old_token=true;;
-      d) destroy_old_tokens=true;;
-      v) verbose=true;;
-      s) show_credentials=true;;
-      n) remove_newer=true;;
+      k) keep_old_token=1;;
+      d) destroy_old_tokens=1;;
+      v) verbose=1;;
+      n) remove_newer=1;;
       h) usage; exit 0;;
       p) profile=$OPTARG;;
       u) username=$OPTARG;;
@@ -74,39 +71,66 @@ function rotate() {
   fi
 
   print "Fetching existing access tokens..."
-  keys=$(run_iam_command list-access-keys | jq '.AccessKeyMetadata')
-  key_length=$(echo $keys | jq '. | length')
-  print "Found $key_length keys."
+  local keys=$(run_iam_command list-access-keys | jq '.AccessKeyMetadata' -r)
+  print "Found keys $keys"
+  local key_length=$(echo $keys | jq '. | length')
 
   case $key_length in
-    0) handleNoExisingKeys;;
-    1) handleOneExistingKey;;
-    2) handleTwoExistingKeys;;
+    0) create_and_run_callback;;
+    1) rotate_single_key;;
+    2) remove_key_and_rotate "$keys";;
     *)
       echoerr "Unexpected amount of existing tokens: $key_length. exiting..."
       echoerr "Keys found: $keys"
       exit 0
       ;;
   esac
+  print "Access key successfully rotated"
 }
 
-function handleOneExistingKey() {
-  print "Creating new key..."
-  new_credentials=$(run_iam_command create-access-key)
-  echo $new_credentials
-}
-
-function handleTwoExistingKeys() {
+function remove_existing_token() {
+  local keys="$1"
   sorted_by_date=$(echo $keys | jq '. | sort_by(.CreateDate)')
+
   if [[ $remove_newer ]]; then
     to_remove=$(echo $sorted_by_date | jq '. | last | .AccessKeyId' -r)
-    print "Removing newer key with ID $to_remove..."
   else
     to_remove=$(echo $sorted_by_date | jq '. | first | .AccessKeyId' -r)
-    print "Removing older key with ID $to_remove..."
   fi
 
+  print "Removing key with ID $to_remove..."
+
   run_iam_command delete-access-key --access-key-id $to_remove
+}
+
+function create_and_run_callback() {
+  print "Creating new key..."
+  new_credentials=$(run_iam_command create-access-key)
+  print "Running callback function with new access key"
+
+  if [[ -z $callback ]]; then
+    print "Callback not passed, printing out credentials instead."
+    print "$new_credentials"
+  else
+    $callback "$new_credentials"
+  fi
+}
+
+function rotate_single_key() {
+  local destroy_existing=${1:-$((1-keep_old_token))}
+
+  create_and_run_callback
+
+  if [[ ! "$destroy_existing" ]]; then
+    print "Removing old token..."
+    remove_existing_token
+  fi
+}
+
+function remove_key_and_rotate() {
+  local keys="$1"
+  remove_existing_token "$keys" 
+  rotate_single_key $destroy_old_tokens
 }
 
 rotate "$@"
