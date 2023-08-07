@@ -93,14 +93,14 @@ function create_and_run_callback() {
 }
 
 function rotate_single_key() {
-  local existing_token=$1
+  local existing_token_access_id_key="$1"
   local destroy_existing=${2:-$((1-keep_old_token))}
 
   create_and_run_callback
 
   if [[ ! "$destroy_existing" ]]; then
-    print "Removing old token..."
-    remove_existing_token "$existing_token"
+    print "Removing existing token..."
+    remove_existing_token "$existing_token_access_id_key"
   fi
 }
 
