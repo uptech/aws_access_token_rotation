@@ -116,6 +116,3 @@ function remove_key_and_rotate() {
     rotate_single_key "$newer" $destroy_old_tokens
   fi
 }
-
-rotate "$@"
-
