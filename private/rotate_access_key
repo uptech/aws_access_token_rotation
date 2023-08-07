@@ -4,6 +4,7 @@ function usage() {
   cat << HELP_USAGE
 This method accepts a user name on AWS, rotates their access token, and performs a callback function with the new access token.
 
+If the user has no access tokens currently, a new token will be created for them.
 If the user has one access token currently, the new token will be created along side it first and the old one will be removed after the callback function completes.
 If the user has two access tokens, one of the existing tokens will be removed and rotated, while the other one will stay untouched (by default).
 
@@ -98,7 +99,7 @@ function rotate_single_key() {
 
   create_and_run_callback
 
-  if [[ ! "$destroy_existing" ]]; then
+  if [[ $destroy_existing == 1 ]]; then
     print "Removing existing token..."
     remove_existing_token "$existing_token_access_id_key"
   fi

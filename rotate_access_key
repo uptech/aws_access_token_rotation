@@ -14,7 +14,7 @@ function rotate() {
 
   case $key_length in
     0) create_and_run_callback;;
-    1) rotate_single_key $(echo "$keys" | jq '. | first | .AccessKeyId');;
+    1) rotate_single_key $(echo "$keys" | jq '. | first | .AccessKeyId' -r);;
     2) remove_key_and_rotate "$keys";;
     *)
       echoerr "Unexpected amount of existing tokens: $key_length. exiting..."
