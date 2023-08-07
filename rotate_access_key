@@ -8,7 +8,7 @@ function rotate() {
   remove_newer=0
   verbose=0
 
-  set_preferences
+  set_preferences "$@"
 
   print "Running in verbose mode"
 
