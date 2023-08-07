@@ -35,6 +35,11 @@ function run_iam_command() {
 }
 
 function set_preferences() {
+  keep_old_token=0
+  destroy_old_tokens=0
+  remove_newer=0
+  verbose=0
+
   # handle options  
   while getopts "kdvsnhp:u:c:" flag; do
     case $flag in

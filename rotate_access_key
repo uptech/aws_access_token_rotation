@@ -3,11 +3,6 @@
 source "./private/rotate_access_key"
 
 function rotate() {
-  keep_old_token=0
-  destroy_old_tokens=0
-  remove_newer=0
-  verbose=0
-
   set_preferences "$@"
 
   print "Running in verbose mode"
