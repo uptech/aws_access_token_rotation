@@ -11,7 +11,7 @@ If the user has two access tokens, one of the existing tokens will be removed an
 usage: rotate [-kdhv] [-p profile] [-u username] [-c callback]
 
 -k           if there was previously one token, keep old access token
--d           destroy all old access tokens
+-d           destroy all old access tokens (even if -k was passed)
 -n           if there are two existing tokens, remove the newer one instead of the older one
 -v           verbose
 -h           show this help message
@@ -108,12 +108,10 @@ function rotate_single_key() {
 function remove_key_and_rotate() {
   local keys="$1"
 
-  sorted_by_date=$(echo "$keys" | jq '. | sort_by(.CreateDate)')
+  newer=$(echo $keys | jq '. | last | .AccessKeyId' -r)
+  older=$(echo $keys | jq '. | first | .AccessKeyId' -r)
 
-  newer=$(echo $sorted_by_date | jq '. | last | .AccessKeyId' -r)
-  older=$(echo $sorted_by_date | jq '. | first | .AccessKeyId' -r)
-
-  if [[ $remove_newer ]]; then
+  if [[ "$remove_newer" == 1 ]]; then
     remove_existing_token "$newer" 
     rotate_single_key "$older" $destroy_old_tokens
   else

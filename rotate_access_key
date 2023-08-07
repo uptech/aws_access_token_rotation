@@ -8,7 +8,7 @@ function rotate() {
   print "Running in verbose mode"
 
   print "Fetching existing access tokens..."
-  local keys=$(run_iam_command list-access-keys | jq '.AccessKeyMetadata' -r)
+  local keys=$(run_iam_command list-access-keys | jq '.AccessKeyMetadata | sort_by(.CreateDate)' -r)
   print "Found keys $keys"
   local key_length=$(echo $keys | jq '. | length')
 
